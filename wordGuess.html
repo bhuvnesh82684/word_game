@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Guess</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex flex-col justify-center items-center h-screen bg-gray-100">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-auto text-center">
+        <h1 class="text-xl font-bold mb-4">Word Guess</h1>
+        <div id="matrix" class="grid gap-2"></div>
+        <p id="message" class="mt-4 text-gray-700"></p>
+    </div>
+
+    <script>
+
+        let wordSize = 0;
+        let currentRow = 0;
+        const totalRows = 8;
+        const random_uuid = crypto.randomUUID();
+
+        async function fetchWordSize() {
+            try {
+                const response = await fetch(`http://127.0.0.1:5000/game/start/${random_uuid}`);  
+                //Replace with actual API
+                console.log(response)
+                const data = await response.json();
+                wordSize = data;// data.size;
+                createMatrix();
+            } catch (error) {
+                document.getElementById("message").innerText = "Error fetching word size.";
+            }
+        }
+
+        function createMatrix() {
+            const matrix = document.getElementById("matrix");
+            //matrix.innerHTML = "";  // Clear previous content
+            matrix.style.display = "grid";
+            matrix.style.gridTemplateColumns = `repeat(${wordSize+1}, 40px)`;
+            
+            for (let i = 0; i < totalRows; i++) {
+                const rowContainer = document.createElement("div");
+                rowContainer.className = "flex items-center gap-2";
+                for (let j = 0; j < wordSize; j++) {
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.maxLength = 1;
+                    input.className = "w-10 h-10 text-center border rounded text-lg";
+                    input.dataset.row = i;
+                    input.dataset.col = j;
+                    input.disabled = i !== 0;
+                    input.addEventListener("input", moveToNextOrPrev);
+                    input.addEventListener("keydown", handleEnter);
+                    matrix.appendChild(input);
+                }
+                const hintContainer = document.createElement("span");
+                hintContainer.className = "ml-2 text-sm font-bold text-gray-700";
+                hintContainer.dataset.row = `hint-${i}`;
+                rowContainer.appendChild(hintContainer);
+
+                matrix.appendChild(rowContainer);
+            }
+        }
+
+        function moveToNextOrPrev(event) {
+            const { row, col } = event.target.dataset;
+            const currentCol = parseInt(col);
+            const currentRow = parseInt(row);
+
+            if (event.inputType === "deleteContentBackward" && currentCol > 0) {
+                // Move to the previous input on Backspace
+                const prevInput = document.querySelector(`[data-row='${currentRow}'][data-col='${currentCol - 1}']`);
+                if (prevInput) {
+                    prevInput.focus();
+                    //prevInput.value = ""; // Clear previous input
+                }
+            } else if (event.target.value && currentCol < wordSize - 1) {
+                // Move to the next input on normal character input
+                const nextInput = document.querySelector(`[data-row='${currentRow}'][data-col='${currentCol + 1}']`);
+                if (nextInput) nextInput.focus();
+            }
+        }
+
+        async function handleEnter(event) {
+            if (event.key === "Enter") {
+                const rowInputs = Array.from(document.querySelectorAll(`[data-row='${currentRow}']`));
+                const word = rowInputs.map(input => input.value).join('');
+                
+                if (word.length !== wordSize) return;
+
+                try {
+                    const response = await fetch(`http://127.0.0.1:5000/game/word_check/${random_uuid}/${word}`); 
+                    const data = await response.json();
+                    console.log(data);
+                    if (data.win_status) {
+                        document.getElementById("message").innerText = "Congratulations! Correct word.";
+                        document.getElementById("message").style.color = "green";
+                    } else {
+                        const hintElement = document.querySelector(`[data-row='hint-${currentRow}']`);
+                        if (hintElement) {
+                            hintElement.innerText = `${data.correct_char_with_position}, ${JSON.stringify(data.correct_char)}`;
+                        } else {
+                            console.error(`Hint element for row ${currentRow} not found!`);
+}
+
+                        document.getElementById("message").innerText = `Correct letters: ${data.correct_char} \n 
+                        Correct letters position: ${data.correct_char_with_position}`;
+                        
+                        if (currentRow < totalRows - 1) {
+                            enableNextRow();
+                        } else {
+                            document.getElementById("message").innerText = "Game Over! Try again.";
+                            document.getElementById("message").style.color = "red";
+                        }
+                    }
+
+                    
+                } catch (error) {
+                    document.getElementById("message").innerText = "Error validating word.";
+                    console.log(error)
+                }
+            }
+        }
+
+        function highlightCorrectLetters(inputs, correctLetters) {
+            inputs.forEach((input, index) => {
+                if (correctLetters.includes(index)) {
+                    input.classList.add("bg-green-300");
+                } else {
+                    input.classList.add("bg-red-300");
+                }
+            });
+        }
+
+        function enableNextRow() {
+            currentRow++;
+            document.querySelectorAll(`[data-row='${currentRow}']`).forEach(input => input.disabled = false);
+        }
+
+        fetchWordSize();
+    </script>
+</body>
+</html>
